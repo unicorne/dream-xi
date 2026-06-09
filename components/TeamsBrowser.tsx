@@ -3,6 +3,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useOwner } from "@/lib/useOwner";
+import { getFormation } from "@/lib/draft/formations";
+import type { RollPlayer } from "@/lib/clientTypes";
+import type { LineQuality } from "@/lib/teamQuality";
+import Pitch from "./Pitch";
+import TeamLines from "./TeamLines";
 
 export interface PoolTeam {
   slug: string;
@@ -11,6 +16,12 @@ export interface PoolTeam {
   formationId: string;
   overall: number;
   quality: { gk: number; def: number; mid: number; att: number; overall: number };
+}
+
+interface Lineup {
+  formationId: string;
+  placements: Record<string, RollPlayer>;
+  quality: LineQuality;
 }
 
 function ratingColor(ovr: number): string {
@@ -28,6 +39,9 @@ export default function TeamsBrowser({ teams }: { teams: PoolTeam[] }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [lineups, setLineups] = useState<Record<string, Lineup | "loading" | "error">>({});
+
   function toggle(slug: string) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -35,6 +49,25 @@ export default function TeamsBrowser({ teams }: { teams: PoolTeam[] }) {
       else if (next.size < 32) next.add(slug);
       return next;
     });
+  }
+
+  async function view(slug: string) {
+    if (expanded === slug) {
+      setExpanded(null);
+      return;
+    }
+    setExpanded(slug);
+    if (!lineups[slug] || lineups[slug] === "error") {
+      setLineups((m) => ({ ...m, [slug]: "loading" }));
+      try {
+        const res = await fetch(`/api/teams/${slug}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error();
+        setLineups((m) => ({ ...m, [slug]: data as Lineup }));
+      } catch {
+        setLineups((m) => ({ ...m, [slug]: "error" }));
+      }
+    }
   }
 
   async function runCup() {
@@ -49,7 +82,7 @@ export default function TeamsBrowser({ teams }: { teams: PoolTeam[] }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed");
-      router.push(`/cup/${data.slug}`);
+      router.push(`/cup/${data.slug}?new=1`);
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);
@@ -69,41 +102,60 @@ export default function TeamsBrowser({ teams }: { teams: PoolTeam[] }) {
 
   return (
     <div className="pb-28">
+      <p className="text-xs text-white/40 mb-2">Tap a team to view its lineup · tick the box to enter it in a cup.</p>
       <div className="rounded-2xl border border-white/10 bg-white/5 divide-y divide-white/5">
         {teams.map((t) => {
           const on = selected.has(t.slug);
+          const open = expanded === t.slug;
+          const lineup = lineups[t.slug];
           return (
-            <button
-              key={t.slug}
-              onClick={() => toggle(t.slug)}
-              className={`w-full flex items-center gap-3 px-3 sm:px-4 py-3 text-left transition ${
-                on ? "bg-emerald-400/15" : "hover:bg-white/5"
-              }`}
-            >
-              <span
-                className={`shrink-0 w-6 h-6 rounded-md border-2 grid place-items-center text-xs font-black ${
-                  on ? "bg-emerald-400 border-emerald-400 text-black" : "border-white/30"
-                }`}
-              >
-                {on ? "✓" : ""}
-              </span>
-              <span className={`shrink-0 w-10 h-10 rounded-lg grid place-items-center font-black ${ratingColor(t.overall)}`}>
-                {t.overall}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="font-semibold truncate block">{t.name}</span>
-                <span className="text-xs text-white/45">
-                  {t.creator ? `by ${t.creator} · ` : ""}{t.formationId}
-                </span>
-              </span>
-              <span className="hidden sm:flex gap-1.5 text-[10px] text-white/55">
-                {(["att", "mid", "def", "gk"] as const).map((k) => (
-                  <span key={k} className="rounded bg-white/10 px-1.5 py-0.5">
-                    {k.toUpperCase()} {t.quality[k]}
+            <div key={t.slug} className={on ? "bg-emerald-400/10" : ""}>
+              <div className="flex items-center gap-3 px-3 sm:px-4 py-3">
+                <button
+                  onClick={() => toggle(t.slug)}
+                  aria-label={on ? "Deselect" : "Select for cup"}
+                  className={`shrink-0 w-6 h-6 rounded-md border-2 grid place-items-center text-xs font-black transition ${
+                    on ? "bg-emerald-400 border-emerald-400 text-black" : "border-white/30 hover:border-white/60"
+                  }`}
+                >
+                  {on ? "✓" : ""}
+                </button>
+                <button
+                  onClick={() => view(t.slug)}
+                  className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                >
+                  <span className={`shrink-0 w-10 h-10 rounded-lg grid place-items-center font-black ${ratingColor(t.overall)}`}>
+                    {t.overall}
                   </span>
-                ))}
-              </span>
-            </button>
+                  <span className="min-w-0 flex-1">
+                    <span className="font-semibold truncate block">{t.name}</span>
+                    <span className="text-xs text-white/45">
+                      {t.creator ? `by ${t.creator} · ` : ""}{t.formationId}
+                    </span>
+                  </span>
+                  <span className="hidden sm:flex gap-1.5 text-[10px] text-white/55">
+                    {(["att", "mid", "def", "gk"] as const).map((k) => (
+                      <span key={k} className="rounded bg-white/10 px-1.5 py-0.5">
+                        {k.toUpperCase()} {t.quality[k]}
+                      </span>
+                    ))}
+                  </span>
+                  <span className="shrink-0 text-white/30 text-xs w-3">{open ? "▲" : "▾"}</span>
+                </button>
+              </div>
+
+              {open && (
+                <div className="px-3 sm:px-4 pb-4">
+                  {lineup === "loading" || !lineup ? (
+                    <div className="py-6 text-center text-white/40 text-sm animate-pulse">Loading lineup…</div>
+                  ) : lineup === "error" ? (
+                    <div className="py-6 text-center text-rose-400 text-sm">Couldn’t load this lineup.</div>
+                  ) : (
+                    <TeamLineup lineup={lineup} />
+                  )}
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
@@ -127,6 +179,43 @@ export default function TeamsBrowser({ teams }: { teams: PoolTeam[] }) {
           </button>
         </div>
         {error && <p className="mx-auto max-w-2xl mt-2 text-center text-rose-400 text-sm">{error}</p>}
+      </div>
+    </div>
+  );
+}
+
+function TeamLineup({ lineup }: { lineup: Lineup }) {
+  const formation = getFormation(lineup.formationId);
+  const players = formation.slots
+    .map((s) => ({ slot: s, p: lineup.placements[s.id] }))
+    .filter((x) => x.p);
+
+  return (
+    <div className="grid sm:grid-cols-[260px_1fr] gap-4">
+      <div className="max-w-[260px] mx-auto w-full">
+        <Pitch formation={formation} placements={lineup.placements} compact />
+      </div>
+      <div className="space-y-3">
+        {lineup.quality && (
+          <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+            <TeamLines q={lineup.quality} />
+          </div>
+        )}
+        <div className="rounded-xl border border-white/10 bg-white/5 divide-y divide-white/5">
+          {players
+            .sort((a, b) => b.p!.overall - a.p!.overall)
+            .map(({ slot, p }) => (
+              <div key={slot.id} className="flex items-center gap-2 px-2.5 py-1.5 text-sm">
+                <span className={`shrink-0 w-7 h-7 rounded grid place-items-center font-bold text-xs ${ratingColor(p!.overall)}`}>
+                  {p!.overall}
+                </span>
+                <span className="flex-1 truncate">
+                  {p!.name} {p!.legend && <span title="Legend">⭐</span>}
+                </span>
+                <span className="text-[10px] text-white/45">{slot.position}</span>
+              </div>
+            ))}
+        </div>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import { eq } from "drizzle-orm";
 import { db, isDbConfigured } from "@/lib/db";
 import { tournaments } from "@/lib/db/schema";
@@ -18,7 +19,9 @@ export default async function CupPage({ params }: { params: Promise<{ slug: stri
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
-      <CupView result={row.result as CupResult} cupName={row.name} slug={slug} />
+      <Suspense>
+        <CupView result={row.result as CupResult} cupName={row.name} slug={slug} />
+      </Suspense>
     </div>
   );
 }

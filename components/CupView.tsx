@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { CupResult, MatchResult, Stage } from "@/lib/sim/types";
 import { STAGE_LABEL } from "@/lib/sim";
@@ -47,6 +48,9 @@ function teamContributors(matches: MatchResult[], teamId: string): Contributor[]
 }
 
 export default function CupView({ result, cupName, slug }: { result: CupResult; cupName?: string | null; slug?: string }) {
+  const searchParams = useSearchParams();
+  const isNew = searchParams.get("new") === "1";
+
   const highlightIds = new Set(result.standings.map((s) => s.id));
   const championEntrant = result.standings.find((s) => s.id === result.champion.id);
 
@@ -56,9 +60,10 @@ export default function CupView({ result, cupName, slug }: { result: CupResult; 
   );
   const total = entrantMatches.length;
 
-  const [revealed, setRevealed] = useState(0);
+  // When revisiting from history (no ?new=1), skip straight to results.
+  const [revealed, setRevealed] = useState(() => isNew ? 0 : total);
   const [animateIndex, setAnimateIndex] = useState(-1);
-  const [animatingDone, setAnimatingDone] = useState(true);
+  const [animatingDone, setAnimatingDone] = useState(!isNew);
   const [skip, setSkip] = useState(0);
   const [openTeam, setOpenTeam] = useState<string | null>(null);
 
