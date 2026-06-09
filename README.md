@@ -1,5 +1,7 @@
 # Dream XI
 
+**[world-cup-simulator-ivory.vercel.app](https://world-cup-simulator-ivory.vercel.app)**
+
 Draft an all-time XI by rolling random historical World Cup squads (1950–2026),
 then simulate a 32-nation tournament and share the result. A rebuild + improvement
 of [7a0.com.br](https://7a0.com.br/en).
